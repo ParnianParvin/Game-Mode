@@ -1,0 +1,95 @@
+
+#include <ArduinoBLE.h>
+const int TriggerPin = 8;
+const int EchoPin    = 9;
+long  Duration       = 10000;
+int   Delay_timer    = 100; 
+long pls;
+
+
+
+volatile unsigned long pulseInTimeBegin = micros();
+volatile unsigned long pulseInTimeEnd = micros();
+volatile bool newPulseDurationAvailable = false;
+
+
+void buttonPinInterrupt()
+{
+  if (digitalRead(EchoPin) == HIGH) {
+    pulseInTimeBegin = micros();
+  }
+  else {
+    pulseInTimeEnd = micros();
+    newPulseDurationAvailable = true;
+  }
+}
+
+BLEService ledService("19b10010-e8f2-537e-4f6c-d104768a1214");
+
+BLEIntCharacteristic buttonCharacteristic("19b10012-e8f2-537e-4f6c-d104768a1214", BLERead | BLENotify);
+
+
+
+void setup() {
+ 
+
+
+  Serial.begin(9600);
+
+  pinMode(TriggerPin, OUTPUT);
+  pinMode(EchoPin, INPUT);
+
+  if (!BLE.begin()) {
+    Serial.println("starting BLE failed!");
+
+    while (1);
+  }
+
+  BLE.setLocalName("ButtonLED");
+
+  BLE.setAdvertisedService(ledService);
+
+  ledService.addCharacteristic(buttonCharacteristic);
+
+  BLE.addService(ledService);
+
+  buttonCharacteristic.writeValue(0);
+
+  BLE.advertise();
+
+  Serial.println("Bluetooth device active, waiting for connections...");
+  attachInterrupt(digitalPinToInterrupt(EchoPin),
+                  buttonPinInterrupt,
+                  CHANGE);
+
+}
+
+void loop() {
+ 
+  BLE.poll();
+
+  digitalWrite(TriggerPin, LOW);
+  delayMicroseconds(2);
+  digitalWrite(TriggerPin,HIGH);
+  delayMicroseconds(10);
+  digitalWrite(TriggerPin, LOW);
+
+  if (newPulseDurationAvailable) {
+    newPulseDurationAvailable = false;
+    pls = pulseInTimeEnd - pulseInTimeBegin;
+  }
+  long Distance_cm = Distance(pls); 
+ 
+  Serial.println(Distance_cm); 
+
+  buttonCharacteristic.writeValue(Distance_cm);
+  delay(Delay_timer); 
+
+
+}
+
+long Distance(long time){
+  long DistanceCalc;
+  DistanceCalc = ((time * 0.034) / 2); 
+  return DistanceCalc;
+}
